@@ -1,6 +1,0 @@
-add is action a, b
-    a + b (type: number)
-end
-main is action
-    add 1, 1
-end
