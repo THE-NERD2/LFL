@@ -1,6 +1,5 @@
+use std::str::Split;
 use std::str::Chars;
-use std::iter::Peekable;
-use std::ops::DerefMut;
 
 #[derive(PartialEq)]
 #[derive(Clone)]
@@ -13,43 +12,60 @@ pub enum Token {
     COMMA,
     COLON,
     PERIOD,
+    YELL,
+    CREATE,
     IS,
     ACTION,
+    BINARY(char),
+    SEPARATOR,
     END, // Ends blocks. TODO: take this from the indentation rather than a keyword
-    PLUS,
-    MINUS,
-    DIVIDE,
-    MULTIPLY,
-    EOF
+    ERROR
 }
 
 pub struct Lexer<'a> {
-    text: &'a str,
-    chars: Box<Peekable<Chars<'a>>>,
-    pos: usize
+    lines: Box<Split<'a, &'a str>>,
+    pos: usize,
+    indentation: i32
 }
 impl<'a> Lexer<'a> {
     pub fn new(text: &'a str) -> Self {
         Self {
-            text: text,
-            chars: Box::new(text.chars().peekable()),
-            pos: 0
+            lines: Box::new(text.split("\n")),
+            pos: 0,
+            indentation: 0
         }
     }
     pub fn lex(&mut self) -> Vec<Token> {
         let mut result: Vec<Token> = Vec::new();
+        
+        let mut has_ended = false;
         loop {
-            let token = self.next_token();
-            result.push(token.clone());
-            if token == Token::EOF {
+            let line = match self.lines.next() {
+                Some(thing) => thing,
+                None => break
+            };
+            loop {
+                let token = self.next_token(line);
+                result.push(token.clone());
+                if token == Token::SEPARATOR {
+                    break;
+                }
+                if token == Token::ERROR {
+                    has_ended = true;
+                    break;
+                }
+            }
+            if has_ended {
                 break;
             }
+            self.pos = 0;
         }
+
         result
     }
-    fn next_token(&mut self) -> Token {
-        let chars = self.chars.deref_mut();
-        let src = self.text;
+    fn next_token(&mut self, line: &str) -> Token {
+        let chars = &mut line[self.pos..].chars().peekable();
+        let src = line;
 
         let mut pos = self.pos;
 
@@ -58,7 +74,7 @@ impl<'a> Lexer<'a> {
             {
                 let c = chars.peek();
                 if c.is_none() {
-                    return Token::EOF;
+                    return Token::SEPARATOR;
                 }
                 if !c.unwrap().is_whitespace() {
                     break;
@@ -71,7 +87,7 @@ impl<'a> Lexer<'a> {
         let start = pos;
         let next = chars.next();
         if next.is_none() {
-            return Token::EOF;
+            return Token::SEPARATOR;
         }
         pos += 1;
         let tok = match next.unwrap() {
@@ -91,9 +107,11 @@ impl<'a> Lexer<'a> {
                     "is" => Token::IS,
                     "action" => Token::ACTION,
                     "end" => Token::END,
+                    "create" => Token::CREATE,
                     ident => Token::IDENT(ident.to_string())
                 }
             },
+            //'0'..='9' | ('.' if chars.peek() == '0'..='9')  => {
             '0'..='9' => {
                 loop {
                     let c = match chars.peek() {
@@ -111,15 +129,14 @@ impl<'a> Lexer<'a> {
             '(' => Token::LPAREN,
             ')' => Token::RPAREN,
             ',' => Token::COMMA,
+            ';' => Token::SEPARATOR,
             ':' => Token::COLON,
             '.' => Token::PERIOD,
-            '+' => Token::PLUS,
-            '-' => Token::MINUS,
-            '/' => Token::DIVIDE,
-            '*' => Token::MULTIPLY,
+            '!' => Token::YELL,
+            c @ ('+' | '-' | '/' | '*') => Token::BINARY(c),
             _ => {
                 eprintln!("Unexpected token");
-                Token::EOF // Stop collecting tokens after unexpected token
+                Token::ERROR // Stop collecting tokens after unexpected token
             }
         };
         self.pos = pos;
