@@ -142,27 +142,29 @@ impl<'a> Lexer<'a> {
                     ident => Token::IDENT(ident.to_string())
                 }
             },
-            //'0'..='9' | ('.' if chars.peek() == '0'..='9')  => {
-            '0'..='9' => {
-                loop {
-                    let c = match chars.peek() {
-                        Some(c) => *c,
-                        None => '\0'
-                    };
-                    if c != '.' && !c.is_ascii_hexdigit() {
-                        break;
+            c @ ('0'..='9' | '.') => {
+                if c == '.' && !chars.peek().unwrap_or(&'\0').is_ascii_hexdigit() {
+                    Token::PERIOD
+                } else {
+                    loop {
+                        let c = match chars.peek() {
+                            Some(c) => *c,
+                            None => '\0'
+                        };
+                        if c != '.' && !c.is_ascii_hexdigit() {
+                            break;
+                        }
+                        chars.next();
+                        pos += 1;
                     }
-                    chars.next();
-                    pos += 1;
+                    Token::NUMBER(src[start..pos].parse().unwrap())
                 }
-                Token::NUMBER(src[start..pos].parse().unwrap())
             },
             '(' => Token::LPAREN,
             ')' => Token::RPAREN,
             ',' => Token::COMMA,
             ';' => Token::SEPARATOR,
             ':' => Token::COLON,
-            '.' => Token::PERIOD,
             '!' => Token::YELL,
             c @ ('+' | '-' | '/' | '*') => Token::BINARY(c),
             _ => {
