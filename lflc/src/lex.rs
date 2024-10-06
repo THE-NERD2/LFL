@@ -1,5 +1,4 @@
 use std::str::Split;
-use std::str::Chars;
 
 #[derive(PartialEq)]
 #[derive(Clone)]
@@ -45,14 +44,24 @@ impl<'a> Lexer<'a> {
                 None => break
             };
             loop {
-                let token = self.next_token(line);
-                result.push(token.clone());
-                if token == Token::SEPARATOR {
+                let tokens = self.next_token(line);
+                for token in tokens.clone().into_iter() {
+                    result.push(token);
+                }
+                /*if tokens.last() == Some(&Token::SEPARATOR) {
                     break;
                 }
-                if token == Token::ERROR {
+                if tokens.last() == Some(&Token::ERROR) {
                     has_ended = true;
                     break;
+                }*/
+                match tokens.last() {
+                    Some(&Token::SEPARATOR) => break,
+                    Some(&Token::ERROR) => {
+                        has_ended = true;
+                        break;
+                    }
+                    _ => ()
                 }
             }
             if has_ended {
@@ -63,18 +72,32 @@ impl<'a> Lexer<'a> {
 
         result
     }
-    fn next_token(&mut self, line: &str) -> Token {
+    fn next_token(&mut self, line: &str) -> Vec<Token> {
+        let mut tokens: Vec<Token> = Vec::new();
+
         let chars = &mut line[self.pos..].chars().peekable();
         let src = line;
 
         let mut pos = self.pos;
 
         // Note indentation
+        let is_new_line = pos == 0;
+        let mut indent = 0;
+        let mut spaces = 0;
         loop {
             {
                 let c = chars.peek();
                 if c.is_none() {
-                    return Token::SEPARATOR;
+                    return vec![Token::SEPARATOR];
+                }
+                if *c.unwrap() == ' ' {
+                    spaces += 1;
+                    if spaces == 4 {
+                        indent += 1;
+                    }
+                }
+                if *c.unwrap() == '\t' {
+                    indent += 1;
                 }
                 if !c.unwrap().is_whitespace() {
                     break;
@@ -83,11 +106,19 @@ impl<'a> Lexer<'a> {
             chars.next();
             pos += 1;
         }
+        if is_new_line {
+            if indent < self.indentation {
+                for _ in 0..self.indentation - indent {
+                    tokens.push(Token::END);
+                }
+            }
+            self.indentation = indent;
+        }
 
         let start = pos;
         let next = chars.next();
         if next.is_none() {
-            return Token::SEPARATOR;
+            return vec![Token::SEPARATOR];
         }
         pos += 1;
         let tok = match next.unwrap() {
@@ -139,7 +170,10 @@ impl<'a> Lexer<'a> {
                 Token::ERROR // Stop collecting tokens after unexpected token
             }
         };
+        tokens.push(tok);
+
         self.pos = pos;
-        tok
+
+        tokens
     }
 }
